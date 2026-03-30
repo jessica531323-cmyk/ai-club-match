@@ -7,6 +7,8 @@ import {
   type Club,
   type ClubCategory,
 } from "./data/clubs";
+import AIChatMatch from "./components/AIChatMatch";
+import type { UserProfileFromAI } from "./lib/volcengine";
 
 // ==================== 类型定义 ====================
 
@@ -27,7 +29,34 @@ type UserProfile = {
 
 type Recommendation = Club & { score: number; reason: string };
 
-type PageView = "home" | "browse" | "detail" | "quiz" | "results";
+type PageView = "home" | "browse" | "detail" | "quiz" | "results" | "aiChat";
+
+// ==================== AI对话转用户画像 ====================
+
+function convertAIProfileToUserProfile(aiProfile: UserProfileFromAI): UserProfile {
+  const roleMap: Record<string, string> = {
+    '领导者': '组织者',
+    '执行者': '核心成员',
+    '创意者': '核心成员',
+    '协调者': '组织者',
+    '参与者': '参与者',
+  };
+
+  return {
+    interests: aiProfile.interests,
+    personality: aiProfile.personality === 'ambivert' ? '中等' : aiProfile.personality,
+    expression: '可以接受',
+    time_commitment: aiProfile.timeCommitment,
+    goals: aiProfile.goals,
+    activity_level: aiProfile.activityLevel,
+    social_preference: aiProfile.socialPreference,
+    role_preference: roleMap[aiProfile.rolePreference] || '参与者',
+    exploration_type: aiProfile.explorationType,
+    user_type: aiProfile.userType,
+    preferred_atmosphere: aiProfile.activityLevel === '高' ? '高强度' : aiProfile.activityLevel === '低' ? '轻松' : '适中',
+    preferred_size: aiProfile.preferredSize,
+  };
+}
 
 // ==================== 问卷数据 ====================
 
@@ -460,6 +489,16 @@ export default function Home() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // AI对话完成后的处理
+  const handleAIChatComplete = (aiProfile: UserProfileFromAI) => {
+    const userProfile = convertAIProfileToUserProfile(aiProfile);
+    const recs = generateRecommendations(userProfile);
+    
+    setProfile(userProfile);
+    setRecommendations(recs);
+    setPageView("results");
+  };
+
   const currentQuestion = questions[currentStep];
   const isLastQuestion = currentStep === questions.length - 1;
   const categories = Object.keys(categoryConfig) as ClubCategory[];
@@ -558,7 +597,7 @@ export default function Home() {
             <button
               onClick={() => { setCurrentStep(0); setAnswers({}); setPageView("quiz"); }}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                pageView === "quiz"
+                pageView === "quiz" || pageView === "aiChat"
                   ? "bg-indigo-500 text-white shadow-md"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -591,7 +630,13 @@ export default function Home() {
                 onClick={() => { setCurrentStep(0); setAnswers({}); setPageView("quiz"); }}
                 className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-lg rounded-2xl hover:shadow-xl hover:scale-105 transition-all"
               >
-                ✨ 开始AI匹配
+                ✨ 问卷匹配（10题）
+              </button>
+              <button
+                onClick={() => setPageView("aiChat")}
+                className="px-8 py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-lg rounded-2xl hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2"
+              >
+                <span>🤖</span> AI深度对话（推荐）
               </button>
               <button
                 onClick={() => setPageView("browse")}
@@ -882,6 +927,14 @@ export default function Home() {
         <footer className="text-center py-8 text-gray-400 text-sm">
           <p>🚀 AI社团匹配平台 · 让兴趣找到归属 · 共 {allClubs.length} 个社团</p>
         </footer>
+      )}
+
+      {/* AI对话匹配 */}
+      {pageView === "aiChat" && (
+        <AIChatMatch
+          onComplete={handleAIChatComplete}
+          onCancel={() => setPageView("home")}
+        />
       )}
 
       {/* 社团详情弹窗 */}
