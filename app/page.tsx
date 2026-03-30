@@ -31,9 +31,10 @@ type Recommendation = Club & { score: number; reason: string };
 
 type PageView = "home" | "browse" | "detail" | "quiz" | "results" | "aiChat";
 
-// ==================== AI对话转用户画像 ====================
+// ==================== AI对话转用户画像（优化版） ====================
 
 function convertAIProfileToUserProfile(aiProfile: UserProfileFromAI): UserProfile {
+  // 角色映射
   const roleMap: Record<string, string> = {
     '领导者': '组织者',
     '执行者': '核心成员',
@@ -42,17 +43,59 @@ function convertAIProfileToUserProfile(aiProfile: UserProfileFromAI): UserProfil
     '参与者': '参与者',
   };
 
+  // 根据兴趣类型补充兴趣标签
+  const interestTypeToTags: Record<string, string[]> = {
+    '创作型': ['艺术', '设计', '写作', '音乐'],
+    '欣赏型': ['电影', '音乐', '美术', '文化'],
+    '社交型': ['社交', '活动', '交流'],
+    '竞技型': ['体育', '比赛', '电竞'],
+    '研究型': ['技术', '学术', '科学'],
+  };
+
+  // 合并兴趣标签
+  let enhancedInterests = [...aiProfile.interests];
+  if (aiProfile.interestType && interestTypeToTags[aiProfile.interestType]) {
+    interestTypeToTags[aiProfile.interestType].forEach(tag => {
+      if (!enhancedInterests.some(i => i.includes(tag) || tag.includes(i))) {
+        enhancedInterests.push(tag);
+      }
+    });
+  }
+
+  // 根据用户特征生成更精准的user_type
+  let userType = aiProfile.userType;
+  if (!userType || userType === '兴趣发展型') {
+    // 根据多维度特征判断
+    if (aiProfile.personality === '外向' && aiProfile.socialPreference === '高' && aiProfile.rolePreference === '领导者') {
+      userType = '社交领袖型';
+    } else if (aiProfile.interestType === '研究型' && aiProfile.explorationType === '专精型') {
+      userType = '专注成长型';
+    } else if (aiProfile.explorationType === '探索型' && aiProfile.interests.length >= 3) {
+      userType = '探索体验型';
+    } else if (aiProfile.goals.includes('提升技能') && (aiProfile.timeCommitment === '5-10h' || aiProfile.timeCommitment === '>10h')) {
+      userType = '目标驱动型';
+    } else if (aiProfile.goals.includes('社会实践') || aiProfile.interests.includes('公益')) {
+      userType = '公益奉献型';
+    } else if (aiProfile.interestType === '创作型' && aiProfile.explorationType === '专精型') {
+      userType = '艺术创作型';
+    } else if (aiProfile.interestType === '竞技型') {
+      userType = '竞技挑战型';
+    } else {
+      userType = '兴趣发展型';
+    }
+  }
+
   return {
-    interests: aiProfile.interests,
+    interests: enhancedInterests.slice(0, 5), // 限制最多5个兴趣
     personality: aiProfile.personality === 'ambivert' ? '中等' : aiProfile.personality,
-    expression: '可以接受',
+    expression: aiProfile.personality === '外向' ? '喜欢表达' : aiProfile.personality === '内向' ? '尽量避免' : '可以接受',
     time_commitment: aiProfile.timeCommitment,
     goals: aiProfile.goals,
     activity_level: aiProfile.activityLevel,
     social_preference: aiProfile.socialPreference,
     role_preference: roleMap[aiProfile.rolePreference] || '参与者',
     exploration_type: aiProfile.explorationType,
-    user_type: aiProfile.userType,
+    user_type: userType,
     preferred_atmosphere: aiProfile.activityLevel === '高' ? '高强度' : aiProfile.activityLevel === '低' ? '轻松' : '适中',
     preferred_size: aiProfile.preferredSize,
   };
@@ -186,59 +229,95 @@ function generateUserProfile(answers: Record<number, string | string[]>): UserPr
   };
 }
 
-// ==================== 推荐算法 ====================
+// ==================== 推荐算法（增强版） ====================
 
 const interestToTags: Record<string, string[]> = {
-  音乐: ["音乐", "吉他", "钢琴", "声乐", "DJ"],
-  表演: ["表演", "话剧", "戏剧", "舞蹈"],
-  摄影: ["摄影", "艺术"],
-  体育: ["体育", "篮球", "足球", "游泳", "武术", "健身", "户外"],
-  技术: ["技术", "编程", "AI", "机器人", "建模"],
-  社交: ["社交", "服务"],
-  写作: ["写作", "新闻", "文学"],
-  绘画: ["绘画", "雕塑", "设计", "创意"],
-  研究: ["研究", "学术", "科学", "金融", "商业", "法律", "医学"],
-  公益: ["公益", "志愿", "教育", "环保"],
+  音乐: ["音乐", "吉他", "钢琴", "声乐", "DJ", "唱歌", "乐器"],
+  表演: ["表演", "话剧", "戏剧", "舞蹈", "舞台"],
+  摄影: ["摄影", "艺术", "拍摄", "照片"],
+  体育: ["体育", "篮球", "足球", "游泳", "武术", "健身", "户外", "运动", "跑步"],
+  技术: ["技术", "编程", "AI", "机器人", "建模", "代码", "开发", "计算机"],
+  社交: ["社交", "服务", "交流", "沟通", "人脉"],
+  写作: ["写作", "新闻", "文学", "文字", "编辑"],
+  绘画: ["绘画", "雕塑", "设计", "创意", "美术", "手绘"],
+  研究: ["研究", "学术", "科学", "金融", "商业", "法律", "医学", "实验"],
+  公益: ["公益", "志愿", "教育", "环保", "慈善", "服务"],
+  电影: ["电影", "影视", "视频", "观影"],
+  游戏: ["游戏", "电竞", "竞技"],
+  美食: ["美食", "烹饪", "料理"],
+  魔术: ["魔术", "表演", "技巧"],
+  桌游: ["桌游", "策略", "游戏"],
+  动漫: ["动漫", "漫画", "二次元", "ACG"],
+  天文: ["天文", "星空", "宇宙"],
+  茶道: ["茶道", "茶文化", "品茶"],
+  阅读: ["阅读", "读书", "书籍"],
+  历史: ["历史", "文化", "考古"],
+};
+
+// 兴趣类型到社团类别的映射
+const interestTypeToCategory: Record<string, string[]> = {
+  '创作型': ['艺术技能类', '兴趣爱好类'],
+  '欣赏型': ['兴趣爱好类', '文化实践类'],
+  '社交型': ['社会公益类', '文化实践类', '艺术技能类'],
+  '竞技型': ['体育活动类', '兴趣爱好类'],
+  '研究型': ['学术科创类', '文化实践类'],
 };
 
 function generateRecommendations(profile: UserProfile): Recommendation[] {
   const scored = allClubs.map((club) => {
     let score = 0;
+    const matchReasons: string[] = [];
 
     // 1. 兴趣匹配（最高权重）
     profile.interests.forEach((interest) => {
       const relatedTags = interestToTags[interest] || [interest];
+      let interestScore = 0;
       relatedTags.forEach((tag) => {
         if (club.tags.some((t) => t.includes(tag) || tag.includes(t))) {
-          score += 20;
+          interestScore += 20;
         }
       });
-      if (club.tags.includes(interest)) score += 10; // 精确匹配额外加分
+      if (club.tags.includes(interest)) interestScore += 15;
+      score += interestScore;
+      
+      if (interestScore > 0) {
+        matchReasons.push(`你对${interest}感兴趣`);
+      }
     });
 
     // 2. 氛围偏好匹配
     if (profile.preferred_atmosphere && club.atmosphere === profile.preferred_atmosphere) {
       score += 15;
+      matchReasons.push(`${club.atmosphere}的氛围适合你`);
     }
 
     // 3. 规模偏好匹配
     if (profile.preferred_size && club.size === profile.preferred_size) {
-      score += 10;
+      score += 12;
+      matchReasons.push(`${club.size}规模符合你的偏好`);
     }
 
     // 4. 活动水平匹配
     if (profile.activity_level === club.activityLevel) {
-      score += 8;
+      score += 10;
+      matchReasons.push(`活动强度与你的期待一致`);
     }
 
     // 5. 社交偏好匹配
     if (profile.social_preference === club.socialLevel) {
-      score += 8;
+      score += 10;
+      matchReasons.push(`社交氛围适合你`);
     }
 
     // 6. 性格匹配
-    if (profile.personality === "外向" && club.socialLevel === "高") score += 6;
-    if (profile.personality === "内向" && club.socialLevel === "低") score += 6;
+    if (profile.personality === "外向" && club.socialLevel === "高") {
+      score += 8;
+      matchReasons.push(`适合外向性格`);
+    }
+    if (profile.personality === "内向" && club.socialLevel === "低") {
+      score += 8;
+      matchReasons.push(`适合内向性格`);
+    }
 
     // 7. 时间投入匹配
     const timeMap: Record<string, string[]> = {
@@ -249,25 +328,64 @@ function generateRecommendations(profile: UserProfile): Recommendation[] {
     };
     if (profile.time_commitment && timeMap[profile.time_commitment]?.includes(club.timeRequired)) {
       score += 8;
+      matchReasons.push(`时间投入要求匹配`);
     }
 
     // 8. 目标匹配
-    if (profile.goals.includes("提升技能") && club.activityLevel === "高") score += 5;
-    if (profile.goals.includes("交朋友") && club.socialLevel === "高") score += 5;
-    if (profile.goals.includes("放松") && club.atmosphere === "轻松") score += 5;
-    if (profile.goals.includes("丰富简历") && (club.size === "大型" || club.activityLevel === "高")) score += 4;
-    if (profile.goals.includes("社会实践") && club.category === "社会公益类") score += 8;
+    if (profile.goals.includes("提升技能") && club.activityLevel === "高") {
+      score += 6;
+      matchReasons.push(`有助于技能提升`);
+    }
+    if (profile.goals.includes("交朋友") && club.socialLevel === "高") {
+      score += 6;
+      matchReasons.push(`社交机会丰富`);
+    }
+    if (profile.goals.includes("放松") && club.atmosphere === "轻松") {
+      score += 6;
+      matchReasons.push(`氛围轻松减压`);
+    }
+    if (profile.goals.includes("丰富简历") && (club.size === "大型" || club.activityLevel === "高")) {
+      score += 5;
+      matchReasons.push(`对简历有帮助`);
+    }
+    if (profile.goals.includes("社会实践") && club.category === "社会公益类") {
+      score += 10;
+      matchReasons.push(`符合社会实践目标`);
+    }
 
     // 9. 探索倾向匹配
-    if (profile.exploration_type === "探索型" && club.tags.length >= 3) score += 4;
-    if (profile.exploration_type === "专精型" && club.atmosphere === "高强度") score += 4;
+    if (profile.exploration_type === "探索型" && club.tags.length >= 3) {
+      score += 5;
+      matchReasons.push(`活动类型丰富多样`);
+    }
+    if (profile.exploration_type === "专精型" && club.atmosphere === "高强度") {
+      score += 5;
+      matchReasons.push(`适合深度专精`);
+    }
 
     // 10. 角色偏好
-    if (profile.role_preference === "组织者" && club.size === "大型") score += 5;
-    if (profile.role_preference === "参与者" && club.atmosphere === "轻松") score += 5;
-    if (profile.role_preference === "核心成员" && club.activityLevel === "高") score += 5;
+    if (profile.role_preference === "组织者" && club.size === "大型") {
+      score += 6;
+      matchReasons.push(`有组织协调空间`);
+    }
+    if (profile.role_preference === "参与者" && club.atmosphere === "轻松") {
+      score += 6;
+      matchReasons.push(`适合轻松参与`);
+    }
+    if (profile.role_preference === "核心成员" && club.activityLevel === "高") {
+      score += 6;
+      matchReasons.push(`可成为核心骨干`);
+    }
 
-    return { ...club, score, reason: "" };
+    // 11. 社团类别与兴趣类型匹配
+    // 从 profile 中获取 interestType（如果存在）
+    const userType = profile.user_type || '';
+    if (userType.includes('艺术') && club.category === '艺术技能类') score += 8;
+    if (userType.includes('学术') && club.category === '学术科创类') score += 8;
+    if (userType.includes('公益') && club.category === '社会公益类') score += 8;
+    if (userType.includes('竞技') && club.category === '体育活动类') score += 8;
+
+    return { ...club, score, reason: matchReasons.join('；') };
   });
 
   const top = scored
@@ -277,23 +395,33 @@ function generateRecommendations(profile: UserProfile): Recommendation[] {
 
   return top.map((club) => ({
     ...club,
-    reason: generateAIReason(club, profile),
+    reason: generateAIReason(club, profile, club.reason),
   }));
 }
 
 // ==================== AI推荐理由生成 ====================
 
-function generateAIReason(club: Club, profile: UserProfile): string {
+function generateAIReason(club: Club, profile: UserProfile, matchDetails?: string): string {
   const userTypeReasons: Record<string, string> = {
     社交领袖型: `你天生具有领导魅力和社交能量，${club.name}这样${club.size === "大型" ? "规模宏大、" : ""}活跃度高的平台能让你大放异彩，发挥组织与协调才能。`,
     专注成长型: `作为技术导向、深度专注型用户，${club.name}提供的专业学习环境和高强度实践，正是你突破自我、夯实技能的最佳舞台。`,
     探索体验型: `你兴趣广泛、求知欲强，${club.name}多元化的活动内容和开放包容的氛围，能满足你不断探索、尝试新事物的热情。`,
     目标驱动型: `你目标明确、执行力强，${club.name}在${club.category}领域的深耕和资源积累，能高效助力你的技能提升和职业发展。`,
     公益奉献型: `你心怀大爱、注重社会价值，${club.name}提供了将热情转化为实际行动的平台，让你在付出中获得成长和满足感。`,
+    艺术创作型: `你富有创造力和艺术感知，${club.name}为你提供了展示才华和持续创作的空间，能让你的艺术潜能得到充分发挥。`,
+    竞技挑战型: `你热爱竞争、追求突破，${club.name}的竞技氛围和挑战机会，能激发你的潜能，带来成就感和成长。`,
     兴趣发展型: `结合你的兴趣偏好和个性特征，${club.name}的${club.atmosphere}氛围和${club.tags.join("、")}相关活动与你的期待高度契合，相信你能在这里找到志同道合的伙伴。`,
   };
 
-  return userTypeReasons[profile.user_type] || userTypeReasons["兴趣发展型"];
+  let baseReason = userTypeReasons[profile.user_type] || userTypeReasons["兴趣发展型"];
+  
+  // 如果有匹配详情，追加到推荐理由中
+  if (matchDetails) {
+    const topMatches = matchDetails.split('；').slice(0, 2).join('，');
+    baseReason += `\n\n匹配亮点：${topMatches}。`;
+  }
+  
+  return baseReason;
 }
 
 // ==================== 社团详情弹窗 ====================
