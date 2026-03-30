@@ -160,11 +160,11 @@ export default function AIChatMatch({ onComplete, onCancel }: AIChatMatchProps) 
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-2xl px-4 py-3 flex items-center gap-2">
                 <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
                 </div>
-                <span className="text-xs text-gray-500">AI思考中...</span>
+                <span className="text-xs text-gray-500">正在分析你的回答...</span>
               </div>
             </div>
           )}
