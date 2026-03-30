@@ -81,7 +81,7 @@ export async function chatWithAI(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'doubao-pro-32k',
+        model: 'doubao-seed-2-0-pro-260215',
         messages: fullMessages,
         temperature: 0.7,
         max_tokens: 800,
@@ -154,7 +154,7 @@ export async function generateFinalProfile(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'doubao-pro-32k',
+        model: 'doubao-seed-2-0-pro-260215',
         messages: [
           ...allMessages,
           { role: 'user', content: summaryPrompt },

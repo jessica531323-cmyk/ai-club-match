@@ -14,7 +14,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages, model = 'doubao-pro-32k', temperature = 0.7, max_tokens = 800 } = body;
+    const { messages, temperature = 0.7, max_tokens = 800 } = body;
+
+    // 使用用户提供的 model name
+    const model = 'doubao-seed-2-0-pro-260215';
 
     const response = await fetch(VOLCENGINE_ENDPOINT, {
       method: 'POST',
