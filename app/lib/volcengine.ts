@@ -1,8 +1,7 @@
-// 火山引擎 API 集成模块
+// 火山引擎 API 集成模块（通过本地 API Route）
 // 文档: https://www.volcengine.com/docs/82379
 
-const VOLCENGINE_API_KEY = process.env.NEXT_PUBLIC_VOLCENGINE_API_KEY || '';
-const VOLCENGINE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const API_ENDPOINT = '/api/chat';
 
 export type Message = {
   role: 'system' | 'user' | 'assistant';
@@ -21,10 +20,10 @@ export type UserProfileFromAI = {
   activityLevel: '高' | '中' | '低';
   explorationType: '探索型' | '专精型';
   userType: string;
-  confidence: number; // AI对画像的置信度 0-1
+  confidence: number;
 };
 
-// 系统提示词：定义AI助手角色
+// 系统提示词
 const SYSTEM_PROMPT = `你是社团匹配助手，一个专业友善的AI顾问。任务是通过自然对话了解学生，推荐最适合的大学社团。
 
 对话原则：
@@ -63,20 +62,12 @@ export const ROUND_PROMPTS: Record<number, string> = {
   10: `第10轮：总结画像，生成用户类型，推荐社团方向，询问用户反馈。`,
 };
 
-// 调用火山引擎API
+// 调用本地 API Route
 export async function chatWithAI(
   messages: Message[],
   round: number
 ): Promise<{ reply: string; profileUpdate?: Partial<UserProfileFromAI> }> {
-  // 检查 API Key
-  if (!VOLCENGINE_API_KEY || VOLCENGINE_API_KEY.includes('填入')) {
-    return {
-      reply: '请先配置火山引擎 API Key。在 .env.local 文件中设置 NEXT_PUBLIC_VOLCENGINE_API_KEY。当前值: ' + (VOLCENGINE_API_KEY ? '已设置但可能无效' : '未设置'),
-    };
-  }
-
   try {
-    // 添加当前轮次的系统提示
     const roundPrompt = ROUND_PROMPTS[round] || '';
     const fullMessages: Message[] = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -84,25 +75,25 @@ export async function chatWithAI(
       ...messages,
     ];
 
-    const requestBody = {
-      model: 'doubao-pro-32k',
-      messages: fullMessages,
-      temperature: 0.7,
-      max_tokens: 800,
-    };
-
-    const response = await fetch(VOLCENGINE_ENDPOINT, {
+    const response = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + VOLCENGINE_API_KEY,
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        model: 'doubao-pro-32k',
+        messages: fullMessages,
+        temperature: 0.7,
+        max_tokens: 800,
+      }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API错误: ${error}`);
+      const errorData = await response.json().catch(() => ({}));
+      console.error('API error:', errorData);
+      return {
+        reply: `抱歉，服务暂时不可用 (${response.status})。请稍后重试。`,
+      };
     }
 
     const data = await response.json();
@@ -114,7 +105,7 @@ export async function chatWithAI(
 
     return { reply: cleanReply, profileUpdate };
   } catch (error) {
-    console.error('火山引擎API调用失败:', error);
+    console.error('Chat API调用失败:', error);
     return {
       reply: '抱歉，我这边出了点小问题😅 能再说一遍吗？',
     };
@@ -156,34 +147,38 @@ export async function generateFinalProfile(
 
 只输出JSON，不要有其他内容。`;
 
-  const response = await fetch(VOLCENGINE_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${VOLCENGINE_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'doubao-pro-32k',
-      messages: [
-        ...allMessages,
-        { role: 'user', content: summaryPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 1000,
-    }),
-  });
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
-
   try {
+    const response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'doubao-pro-32k',
+        messages: [
+          ...allMessages,
+          { role: 'user', content: summaryPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+
     // 尝试从回复中提取JSON
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]) as UserProfileFromAI;
     }
     throw new Error('无法解析画像');
-  } catch {
+  } catch (error) {
+    console.error('生成最终画像失败:', error);
     // 返回默认画像
     return {
       interests: ['综合发展'],
